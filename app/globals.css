@@ -1,26 +1,188 @@
-@import "tailwindcss";
-
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --page-background: #000000;
+  --hero-background: #fffff2;
+  --panel-background: #eeeeee;
+  --text: #000000;
+  --button-face: #d1d1d1;
+  --button-border-light: #ffffff;
+  --button-border-dark: #9a9a9a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--page-background);
+  color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.beat-page {
+  min-height: 100vh;
+  background: var(--page-background);
+  color: var(--text);
+  padding-top: 35px;
+}
+
+.hero-card {
+  width: 322px;
+  height: 107px;
+  margin-left: 1px;
+  background: var(--hero-background);
+  text-align: center;
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.hero-card h1 {
+  margin: -7px 0 3px;
+  font-family: Georgia, "Times New Roman", Times, serif;
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.hero-card p {
+  margin: 0 0 4px;
+}
+
+.hero-card dl {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.02;
+}
+
+.hero-card div {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.hero-card dt,
+.hero-card dd {
+  margin: 0;
+}
+
+.hero-card a {
+  color: #0000ee;
+  text-decoration: underline;
+}
+
+.patch-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 23px;
+  width: 554px;
+  min-height: 282px;
+  margin-top: 6px;
+  margin-left: 0;
+  background: var(--panel-background);
+  padding: 1px 4px 20px;
+  font-size: 11.5px;
+}
+
+.tool-column {
+  min-width: 0;
+}
+
+.tool-column h2 {
+  margin: -1px 0 4px;
+  font-size: 23px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.field-step {
+  margin-bottom: 7px;
+}
+
+.field-step p {
+  margin: 0 0 4px;
+  white-space: nowrap;
+}
+
+.file-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.file-control button,
+.action-button {
+  width: 78px;
+  height: 21px;
+  padding: 1px 6px;
+  border: 1px solid var(--button-border-dark);
+  border-top-color: var(--button-border-light);
+  border-left-color: var(--button-border-light);
+  border-radius: 0;
+  background: var(--button-face);
+  color: #000;
+  box-shadow: inset -1px -1px 0 #bdbdbd;
+  text-align: center;
+}
+
+.file-control strong {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.file-name {
+  display: inline-block;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.overwrite-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: -2px;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+.overwrite-option input {
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.apply-action {
+  margin-top: 0;
+}
+
+.action-button {
+  color: #858585;
+}
+
+@media (max-width: 553px) {
+  .patch-panel {
+    width: 100%;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }

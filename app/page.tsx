@@ -1,65 +1,243 @@
-import Image from "next/image";
+"use client";
+
+import { useRef, useState } from "react";
+
+type FileKey =
+  | "createPatch"
+  | "createOriginal"
+  | "createModified"
+  | "applyPatch"
+  | "applyOriginal"
+  | "applyOutput";
+
+type SaveFilePickerOptions = {
+  suggestedName?: string;
+  types?: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+};
+
+type FileSystemFileHandle = {
+  name: string;
+};
+
+declare global {
+  interface Window {
+    showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandle>;
+  }
+}
+
+const createRows = [
+  {
+    key: "createPatch" as const,
+    label: "Step 1: choose a location to save the patch file to:",
+    mode: "save" as const,
+    suggestedName: "patch.bps",
+  },
+  {
+    key: "createOriginal" as const,
+    label: "Step 2: choose the original file to create a patch from:",
+    mode: "open" as const,
+  },
+  {
+    key: "createModified" as const,
+    label: "Step 3: choose the modified file to create a patch to:",
+    mode: "open" as const,
+  },
+];
+
+const applyRows = [
+  {
+    key: "applyPatch" as const,
+    label: "Step 1: choose the patch file to apply:",
+    mode: "open" as const,
+  },
+  {
+    key: "applyOriginal" as const,
+    label: "Step 2: choose the original file to apply the patch to:",
+    mode: "open" as const,
+  },
+  {
+    key: "applyOutput" as const,
+    label: "Step 3: choose where to write the modified file to:",
+    mode: "save" as const,
+    suggestedName: "modified.bin",
+  },
+];
+
+function selectedLabel(name?: string) {
+  return name || "(no file selected)";
+}
+
+function FileChoice({
+  fileKey,
+  label,
+  mode,
+  suggestedName,
+  value,
+  onFileSelected,
+  onSaveSelected,
+}: {
+  fileKey: FileKey;
+  label: string;
+  mode: "open" | "save";
+  suggestedName?: string;
+  value?: string;
+  onFileSelected: (key: FileKey, file: File) => void;
+  onSaveSelected: (key: FileKey, suggestedName: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function chooseFile() {
+    if (mode === "save") {
+      onSaveSelected(fileKey, suggestedName ?? "output.bin");
+      return;
+    }
+
+    inputRef.current?.click();
+  }
+
+  return (
+    <div className="field-step">
+      <p>{label}</p>
+      <div className="file-control">
+        <button type="button" onClick={chooseFile}>
+          Select
+        </button>
+        <strong className="file-name" title={selectedLabel(value)}>
+          {selectedLabel(value)}
+        </strong>
+        {mode === "open" ? (
+          <input
+            ref={inputRef}
+            className="hidden-file-input"
+            type="file"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+
+              if (file) {
+                onFileSelected(fileKey, file);
+              }
+            }}
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
+  const [selectedFiles, setSelectedFiles] = useState<Partial<Record<FileKey, string>>>({});
+  const [overwriteOriginal, setOverwriteOriginal] = useState(false);
+
+  function rememberFile(key: FileKey, file: File) {
+    setSelectedFiles((current) => ({ ...current, [key]: file.name }));
+  }
+
+  async function rememberSaveLocation(key: FileKey, suggestedName: string) {
+    if (typeof window.showSaveFilePicker === "function") {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [
+            {
+              description: "All files",
+              accept: { "application/octet-stream": [".bps", ".bin", ".sfc", ".smc"] },
+            },
+          ],
+        });
+
+        setSelectedFiles((current) => ({ ...current, [key]: handle.name }));
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    const fileName = window.prompt("Save as:", suggestedName)?.trim();
+
+    if (fileName) {
+      setSelectedFiles((current) => ({ ...current, [key]: fileName }));
+    }
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <main className="beat-page">
+      <header className="hero-card" aria-labelledby="app-title">
+        <h1 id="app-title">beat</h1>
+        <p>A binary patching tool using the beat file format</p>
+        <dl>
+          <div>
+            <dt>Version:</dt>
+            <dd>v2</dd>
+          </div>
+          <div>
+            <dt>License:</dt>
+            <dd>
+              <a href="https://opensource.org/license/isc" target="_blank" rel="noreferrer">
+                ISC
+              </a>
+            </dd>
+          </div>
+        </dl>
+      </header>
+
+      <section className="patch-panel" aria-label="BPS patch tools">
+        <section className="tool-column" aria-labelledby="create-title">
+          <h2 id="create-title">Create BPS Patch</h2>
+          {createRows.map((row) => (
+            <FileChoice
+              key={row.key}
+              fileKey={row.key}
+              label={row.label}
+              mode={row.mode}
+              suggestedName={row.suggestedName}
+              value={selectedFiles[row.key]}
+              onFileSelected={rememberFile}
+              onSaveSelected={rememberSaveLocation}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+          ))}
+          <div className="field-step">
+            <p>Step 4: create the patch:</p>
+            <button className="action-button" type="button" disabled>
+              Create
+            </button>
+          </div>
+        </section>
+
+        <section className="tool-column" aria-labelledby="apply-title">
+          <h2 id="apply-title">Apply BPS Patch</h2>
+          {applyRows.map((row) => (
+            <FileChoice
+              key={row.key}
+              fileKey={row.key}
+              label={row.label}
+              mode={row.mode}
+              suggestedName={row.suggestedName}
+              value={selectedFiles[row.key]}
+              onFileSelected={rememberFile}
+              onSaveSelected={rememberSaveLocation}
+            />
+          ))}
+          <label className="overwrite-option">
+            <input
+              type="checkbox"
+              checked={overwriteOriginal}
+              onChange={(event) => setOverwriteOriginal(event.currentTarget.checked)}
+            />
+            <span>Overwrite the original file (irreversible)</span>
+          </label>
+          <div className="field-step apply-action">
+            <p>Step 4: apply the patch:</p>
+            <button className="action-button" type="button" disabled>
+              Apply
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
   );
 }
