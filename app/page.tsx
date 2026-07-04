@@ -142,10 +142,12 @@ export default function Home() {
     try {
       const originalData = new Uint8Array(await createOriginal.arrayBuffer());
       const modifiedData = new Uint8Array(await createModified.arrayBuffer());
+      const startTime = performance.now();
       const patchData = createBpsPatch(originalData, modifiedData);
+      const endTime = performance.now();
 
       downloadBytes(patchData, createPatchName(createOriginal, createModified));
-      setCreateStatus("patch created successfully");
+      setCreateStatus("patch created successfully in " + ((endTime - startTime) / 1000).toFixed(2) + " seconds");
     } catch (error) {
       setCreateStatus(error instanceof Error ? error.message : "Failed to create patch");
     } finally {
@@ -162,7 +164,9 @@ export default function Home() {
     try {
       const patchData = new Uint8Array(await applyPatch.arrayBuffer());
       const originalData = new Uint8Array(await applyOriginal.arrayBuffer());
+      const startTime = performance.now();
       const { target, result } = applyBpsPatch(originalData, patchData);
+      const endTime = performance.now();
 
       if (result || !target) {
         setApplyStatus(result || "Failed to apply patch");
@@ -170,7 +174,7 @@ export default function Home() {
       }
 
       downloadBytes(target, applyPatchName(applyOriginal));
-      setApplyStatus("patch applied successfully");
+      setApplyStatus("patch applied successfully in " + ((endTime - startTime) / 1000).toFixed(2) + " seconds");
     } catch (error) {
       setApplyStatus(error instanceof Error ? error.message : "Failed to apply patch");
     } finally {
