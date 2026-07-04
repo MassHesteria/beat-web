@@ -36,6 +36,7 @@ input {
   background: var(--page-background);
   color: var(--text);
   padding-top: 35px;
+  padding-left: 10px;
 }
 
 .hero-card {
@@ -49,7 +50,7 @@ input {
 }
 
 .hero-card h1 {
-  margin: -7px 0 3px;
+  margin: 0 0 3px;
   font-family: Georgia, "Times New Roman", Times, serif;
   font-size: 52px;
   font-weight: 700;
@@ -175,8 +176,13 @@ input {
   margin-top: 0;
 }
 
-.action-button {
+.action-button:disabled {
   color: #858585;
+}
+
+.status-message {
+  margin: -2px 0 0;
+  font-weight: 700;
 }
 
 @media (max-width: 553px) {

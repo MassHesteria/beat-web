@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { createBpsPatch } from "@/lib/bps";
 
 type FileKey =
   | "createPatch"
@@ -18,13 +19,24 @@ type SaveFilePickerOptions = {
   }>;
 };
 
-type FileSystemFileHandle = {
+type WritableFile = {
+  write: (data: BufferSource | Blob) => Promise<void>;
+  close: () => Promise<void>;
+};
+
+type SaveFileHandle = {
   name: string;
+  createWritable: () => Promise<WritableFile>;
+};
+
+type SaveTarget = {
+  name: string;
+  handle?: SaveFileHandle;
 };
 
 declare global {
   interface Window {
-    showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<FileSystemFileHandle>;
+    showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<SaveFileHandle>;
   }
 }
 
@@ -68,6 +80,19 @@ const applyRows = [
 
 function selectedLabel(name?: string) {
   return name || "(no file selected)";
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function downloadBytes(data: Uint8Array, fileName: string) {
+  const url = URL.createObjectURL(new Blob([toArrayBuffer(data)], { type: "application/octet-stream" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function FileChoice({
@@ -128,11 +153,24 @@ function FileChoice({
 }
 
 export default function Home() {
-  const [selectedFiles, setSelectedFiles] = useState<Partial<Record<FileKey, string>>>({});
+  const [selectedFiles, setSelectedFiles] = useState<Partial<Record<FileKey, File>>>({});
+  const [saveTargets, setSaveTargets] = useState<Partial<Record<FileKey, SaveTarget>>>({});
   const [overwriteOriginal, setOverwriteOriginal] = useState(false);
+  const [status, setStatus] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  const createPatchTarget = saveTargets.createPatch;
+  const createOriginal = selectedFiles.createOriginal;
+  const createModified = selectedFiles.createModified;
+  const canCreatePatch = Boolean(createPatchTarget && createOriginal && createModified && !isCreating);
+
+  function displayName(key: FileKey) {
+    return selectedFiles[key]?.name ?? saveTargets[key]?.name;
+  }
 
   function rememberFile(key: FileKey, file: File) {
-    setSelectedFiles((current) => ({ ...current, [key]: file.name }));
+    setSelectedFiles((current) => ({ ...current, [key]: file }));
+    setStatus("");
   }
 
   async function rememberSaveLocation(key: FileKey, suggestedName: string) {
@@ -142,13 +180,14 @@ export default function Home() {
           suggestedName,
           types: [
             {
-              description: "All files",
+              description: "BPS patch files",
               accept: { "application/octet-stream": [".bps", ".bin", ".sfc", ".smc"] },
             },
           ],
         });
 
-        setSelectedFiles((current) => ({ ...current, [key]: handle.name }));
+        setSaveTargets((current) => ({ ...current, [key]: { name: handle.name, handle } }));
+        setStatus("");
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") {
@@ -160,7 +199,35 @@ export default function Home() {
     const fileName = window.prompt("Save as:", suggestedName)?.trim();
 
     if (fileName) {
-      setSelectedFiles((current) => ({ ...current, [key]: fileName }));
+      setSaveTargets((current) => ({ ...current, [key]: { name: fileName } }));
+      setStatus("");
+    }
+  }
+
+  async function createPatch() {
+    if (!createPatchTarget || !createOriginal || !createModified) return;
+
+    setIsCreating(true);
+    setStatus("Creating patch...");
+
+    try {
+      const originalData = new Uint8Array(await createOriginal.arrayBuffer());
+      const modifiedData = new Uint8Array(await createModified.arrayBuffer());
+      const patchData = createBpsPatch(originalData, modifiedData);
+
+      if (createPatchTarget.handle) {
+        const writable = await createPatchTarget.handle.createWritable();
+        await writable.write(toArrayBuffer(patchData));
+        await writable.close();
+      } else {
+        downloadBytes(patchData, createPatchTarget.name);
+      }
+
+      setStatus("patch created successfully");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Failed to create patch");
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -195,17 +262,18 @@ export default function Home() {
               label={row.label}
               mode={row.mode}
               suggestedName={row.suggestedName}
-              value={selectedFiles[row.key]}
+              value={displayName(row.key)}
               onFileSelected={rememberFile}
               onSaveSelected={rememberSaveLocation}
             />
           ))}
           <div className="field-step">
             <p>Step 4: create the patch:</p>
-            <button className="action-button" type="button" disabled>
+            <button className="action-button" type="button" disabled={!canCreatePatch} onClick={createPatch}>
               Create
             </button>
           </div>
+          {status ? <p className="status-message">{status}</p> : null}
         </section>
 
         <section className="tool-column" aria-labelledby="apply-title">
@@ -217,7 +285,7 @@ export default function Home() {
               label={row.label}
               mode={row.mode}
               suggestedName={row.suggestedName}
-              value={selectedFiles[row.key]}
+              value={displayName(row.key)}
               onFileSelected={rememberFile}
               onSaveSelected={rememberSaveLocation}
             />
