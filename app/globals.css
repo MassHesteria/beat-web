@@ -87,7 +87,7 @@ input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 23px;
-  width: 554px;
+  width: 600px;
   min-height: 282px;
   margin-top: 6px;
   margin-left: 0;
@@ -98,10 +98,11 @@ input {
 
 .tool-column {
   min-width: 0;
+  margin-left: 10px;
 }
 
 .tool-column h2 {
-  margin: -1px 0 4px;
+  margin: 10px 0 4px;
   font-size: 23px;
   line-height: 1;
   font-weight: 700;

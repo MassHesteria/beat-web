@@ -3,59 +3,16 @@
 import { useRef, useState } from "react";
 import { createBpsPatch } from "@/lib/bps";
 
-type FileKey =
-  | "createPatch"
-  | "createOriginal"
-  | "createModified"
-  | "applyPatch"
-  | "applyOriginal"
-  | "applyOutput";
-
-type SaveFilePickerOptions = {
-  suggestedName?: string;
-  types?: Array<{
-    description: string;
-    accept: Record<string, string[]>;
-  }>;
-};
-
-type WritableFile = {
-  write: (data: BufferSource | Blob) => Promise<void>;
-  close: () => Promise<void>;
-};
-
-type SaveFileHandle = {
-  name: string;
-  createWritable: () => Promise<WritableFile>;
-};
-
-type SaveTarget = {
-  name: string;
-  handle?: SaveFileHandle;
-};
-
-declare global {
-  interface Window {
-    showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<SaveFileHandle>;
-  }
-}
+type FileKey = "createOriginal" | "createModified" | "applyPatch" | "applyOriginal";
 
 const createRows = [
   {
-    key: "createPatch" as const,
-    label: "Step 1: choose a location to save the patch file to:",
-    mode: "save" as const,
-    suggestedName: "patch.bps",
-  },
-  {
     key: "createOriginal" as const,
-    label: "Step 2: choose the original file to create a patch from:",
-    mode: "open" as const,
+    label: "Step 1: choose the original file to create a patch from:",
   },
   {
     key: "createModified" as const,
-    label: "Step 3: choose the modified file to create a patch to:",
-    mode: "open" as const,
+    label: "Step 2: choose the modified file to create a patch to:",
   },
 ];
 
@@ -63,18 +20,10 @@ const applyRows = [
   {
     key: "applyPatch" as const,
     label: "Step 1: choose the patch file to apply:",
-    mode: "open" as const,
   },
   {
     key: "applyOriginal" as const,
     label: "Step 2: choose the original file to apply the patch to:",
-    mode: "open" as const,
-  },
-  {
-    key: "applyOutput" as const,
-    label: "Step 3: choose where to write the modified file to:",
-    mode: "save" as const,
-    suggestedName: "modified.bin",
   },
 ];
 
@@ -84,6 +33,12 @@ function selectedLabel(name?: string) {
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function patchName(original: File, modified: File) {
+  const originalBase = original.name.replace(/\.[^.]*$/, "") || "original";
+  const modifiedBase = modified.name.replace(/\.[^.]*$/, "") || "modified";
+  return `${originalBase}_to_${modifiedBase}.bps`;
 }
 
 function downloadBytes(data: Uint8Array, fileName: string) {
@@ -98,55 +53,38 @@ function downloadBytes(data: Uint8Array, fileName: string) {
 function FileChoice({
   fileKey,
   label,
-  mode,
-  suggestedName,
   value,
   onFileSelected,
-  onSaveSelected,
 }: {
   fileKey: FileKey;
   label: string;
-  mode: "open" | "save";
-  suggestedName?: string;
   value?: string;
   onFileSelected: (key: FileKey, file: File) => void;
-  onSaveSelected: (key: FileKey, suggestedName: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-
-  function chooseFile() {
-    if (mode === "save") {
-      onSaveSelected(fileKey, suggestedName ?? "output.bin");
-      return;
-    }
-
-    inputRef.current?.click();
-  }
 
   return (
     <div className="field-step">
       <p>{label}</p>
       <div className="file-control">
-        <button type="button" onClick={chooseFile}>
+        <button type="button" onClick={() => inputRef.current?.click()}>
           Select
         </button>
         <strong className="file-name" title={selectedLabel(value)}>
           {selectedLabel(value)}
         </strong>
-        {mode === "open" ? (
-          <input
-            ref={inputRef}
-            className="hidden-file-input"
-            type="file"
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0];
+        <input
+          ref={inputRef}
+          className="hidden-file-input"
+          type="file"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
 
-              if (file) {
-                onFileSelected(fileKey, file);
-              }
-            }}
-          />
-        ) : null}
+            if (file) {
+              onFileSelected(fileKey, file);
+            }
+          }}
+        />
       </div>
     </div>
   );
@@ -154,18 +92,16 @@ function FileChoice({
 
 export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<Partial<Record<FileKey, File>>>({});
-  const [saveTargets, setSaveTargets] = useState<Partial<Record<FileKey, SaveTarget>>>({});
   const [overwriteOriginal, setOverwriteOriginal] = useState(false);
   const [status, setStatus] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  const createPatchTarget = saveTargets.createPatch;
   const createOriginal = selectedFiles.createOriginal;
   const createModified = selectedFiles.createModified;
-  const canCreatePatch = Boolean(createPatchTarget && createOriginal && createModified && !isCreating);
+  const canCreatePatch = Boolean(createOriginal && createModified && !isCreating);
 
   function displayName(key: FileKey) {
-    return selectedFiles[key]?.name ?? saveTargets[key]?.name;
+    return selectedFiles[key]?.name;
   }
 
   function rememberFile(key: FileKey, file: File) {
@@ -173,39 +109,8 @@ export default function Home() {
     setStatus("");
   }
 
-  async function rememberSaveLocation(key: FileKey, suggestedName: string) {
-    if (typeof window.showSaveFilePicker === "function") {
-      try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName,
-          types: [
-            {
-              description: "BPS patch files",
-              accept: { "application/octet-stream": [".bps", ".bin", ".sfc", ".smc"] },
-            },
-          ],
-        });
-
-        setSaveTargets((current) => ({ ...current, [key]: { name: handle.name, handle } }));
-        setStatus("");
-        return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-      }
-    }
-
-    const fileName = window.prompt("Save as:", suggestedName)?.trim();
-
-    if (fileName) {
-      setSaveTargets((current) => ({ ...current, [key]: { name: fileName } }));
-      setStatus("");
-    }
-  }
-
   async function createPatch() {
-    if (!createPatchTarget || !createOriginal || !createModified) return;
+    if (!createOriginal || !createModified) return;
 
     setIsCreating(true);
     setStatus("Creating patch...");
@@ -215,14 +120,7 @@ export default function Home() {
       const modifiedData = new Uint8Array(await createModified.arrayBuffer());
       const patchData = createBpsPatch(originalData, modifiedData);
 
-      if (createPatchTarget.handle) {
-        const writable = await createPatchTarget.handle.createWritable();
-        await writable.write(toArrayBuffer(patchData));
-        await writable.close();
-      } else {
-        downloadBytes(patchData, createPatchTarget.name);
-      }
-
+      downloadBytes(patchData, patchName(createOriginal, createModified));
       setStatus("patch created successfully");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to create patch");
@@ -260,15 +158,12 @@ export default function Home() {
               key={row.key}
               fileKey={row.key}
               label={row.label}
-              mode={row.mode}
-              suggestedName={row.suggestedName}
               value={displayName(row.key)}
               onFileSelected={rememberFile}
-              onSaveSelected={rememberSaveLocation}
             />
           ))}
           <div className="field-step">
-            <p>Step 4: create the patch:</p>
+            <p>Step 3: create the patch:</p>
             <button className="action-button" type="button" disabled={!canCreatePatch} onClick={createPatch}>
               Create
             </button>
@@ -283,11 +178,8 @@ export default function Home() {
               key={row.key}
               fileKey={row.key}
               label={row.label}
-              mode={row.mode}
-              suggestedName={row.suggestedName}
               value={displayName(row.key)}
               onFileSelected={rememberFile}
-              onSaveSelected={rememberSaveLocation}
             />
           ))}
           <label className="overwrite-option">
@@ -299,7 +191,7 @@ export default function Home() {
             <span>Overwrite the original file (irreversible)</span>
           </label>
           <div className="field-step apply-action">
-            <p>Step 4: apply the patch:</p>
+            <p>Step 3: apply the patch:</p>
             <button className="action-button" type="button" disabled>
               Apply
             </button>
