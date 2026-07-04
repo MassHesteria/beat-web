@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createBpsPatch } from "@/lib/bps";
+import { applyBpsPatch, createBpsPatch } from "@/lib/bps";
 
 type FileKey = "createOriginal" | "createModified" | "applyPatch" | "applyOriginal";
 
@@ -35,10 +35,24 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
-function patchName(original: File, modified: File) {
-  const originalBase = original.name.replace(/\.[^.]*$/, "") || "original";
-  const modifiedBase = modified.name.replace(/\.[^.]*$/, "") || "modified";
+function stripExtension(fileName: string) {
+  return fileName.replace(/\.[^.]*$/, "");
+}
+
+function createPatchName(original: File, modified: File) {
+  const originalBase = stripExtension(original.name) || "original";
+  const modifiedBase = stripExtension(modified.name) || "modified";
   return `${originalBase}_to_${modifiedBase}.bps`;
+}
+
+function applyPatchName(original: File) {
+  const dot = original.name.lastIndexOf(".");
+
+  if (dot <= 0) {
+    return `${original.name || "modified"}_patched`;
+  }
+
+  return `${original.name.slice(0, dot)}_patched${original.name.slice(dot)}`;
 }
 
 function downloadBytes(data: Uint8Array, fileName: string) {
@@ -92,13 +106,18 @@ function FileChoice({
 
 export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<Partial<Record<FileKey, File>>>({});
-  const [overwriteOriginal, setOverwriteOriginal] = useState(false);
-  const [status, setStatus] = useState("");
+  const [createStatus, setCreateStatus] = useState("");
+  const [applyStatus, setApplyStatus] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
 
   const createOriginal = selectedFiles.createOriginal;
   const createModified = selectedFiles.createModified;
+  const applyPatch = selectedFiles.applyPatch;
+  const applyOriginal = selectedFiles.applyOriginal;
+
   const canCreatePatch = Boolean(createOriginal && createModified && !isCreating);
+  const canApplyPatch = Boolean(applyPatch && applyOriginal && !isApplying);
 
   function displayName(key: FileKey) {
     return selectedFiles[key]?.name;
@@ -106,26 +125,56 @@ export default function Home() {
 
   function rememberFile(key: FileKey, file: File) {
     setSelectedFiles((current) => ({ ...current, [key]: file }));
-    setStatus("");
+
+    if (key === "createOriginal" || key === "createModified") {
+      setCreateStatus("");
+    } else {
+      setApplyStatus("");
+    }
   }
 
   async function createPatch() {
     if (!createOriginal || !createModified) return;
 
     setIsCreating(true);
-    setStatus("Creating patch...");
+    setCreateStatus("Creating patch...");
 
     try {
       const originalData = new Uint8Array(await createOriginal.arrayBuffer());
       const modifiedData = new Uint8Array(await createModified.arrayBuffer());
       const patchData = createBpsPatch(originalData, modifiedData);
 
-      downloadBytes(patchData, patchName(createOriginal, createModified));
-      setStatus("patch created successfully");
+      downloadBytes(patchData, createPatchName(createOriginal, createModified));
+      setCreateStatus("patch created successfully");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Failed to create patch");
+      setCreateStatus(error instanceof Error ? error.message : "Failed to create patch");
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  async function applyPatchToFile() {
+    if (!applyPatch || !applyOriginal) return;
+
+    setIsApplying(true);
+    setApplyStatus("Applying patch...");
+
+    try {
+      const patchData = new Uint8Array(await applyPatch.arrayBuffer());
+      const originalData = new Uint8Array(await applyOriginal.arrayBuffer());
+      const { target, result } = applyBpsPatch(originalData, patchData);
+
+      if (result || !target) {
+        setApplyStatus(result || "Failed to apply patch");
+        return;
+      }
+
+      downloadBytes(target, applyPatchName(applyOriginal));
+      setApplyStatus("patch applied successfully");
+    } catch (error) {
+      setApplyStatus(error instanceof Error ? error.message : "Failed to apply patch");
+    } finally {
+      setIsApplying(false);
     }
   }
 
@@ -168,7 +217,7 @@ export default function Home() {
               Create
             </button>
           </div>
-          {status ? <p className="status-message">{status}</p> : null}
+          {createStatus ? <p className="status-message">{createStatus}</p> : null}
         </section>
 
         <section className="tool-column" aria-labelledby="apply-title">
@@ -182,20 +231,13 @@ export default function Home() {
               onFileSelected={rememberFile}
             />
           ))}
-          <label className="overwrite-option">
-            <input
-              type="checkbox"
-              checked={overwriteOriginal}
-              onChange={(event) => setOverwriteOriginal(event.currentTarget.checked)}
-            />
-            <span>Overwrite the original file (irreversible)</span>
-          </label>
           <div className="field-step apply-action">
             <p>Step 3: apply the patch:</p>
-            <button className="action-button" type="button" disabled>
+            <button className="action-button" type="button" disabled={!canApplyPatch} onClick={applyPatchToFile}>
               Apply
             </button>
           </div>
+          {applyStatus ? <p className="status-message">{applyStatus}</p> : null}
         </section>
       </section>
     </main>
